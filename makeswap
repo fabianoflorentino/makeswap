@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# Variáveis do sistema.
+START=0
+END=$2
+SWAP_FILE="/swapfile"
+FSTAB="/etc/fstab"
+LOG_OUT="/tmp/makeswap.out"
+LOG_ERR="/tmp/makeswap.err"
+
+
+if [ "${1}" == "--make" ]
+then
+    make_swap() # Função para criar swap conforme a quantidade desejada em Gigas.
+    {
+        # Conta a quantidade de swap que vai ser criada em Gigas.
+        for (( CNT=$START ; CNT<$END; CNT++ ))
+        do
+            if [ ! -f "${SWAP_FILE}${CNT}" ]
+            then
+                {
+                    # Cria um arquivo swap de 1G e ativa na inicialização do sistema.
+                    dd if=/dev/zero of=${SWAP_FILE}${CNT} bs=1024 count=976563 \
+                    1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+                    
+                    chmod 0600 ${SWAP_FILE}${CNT}
+
+                    mkswap ${SWAP_FILE}${CNT} 1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+
+                    swapon ${SWAP_FILE}${CNT} 1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+
+                    echo "${SWAP_FILE}${CNT} swap swap defaults 0 0" >> /etc/fstab
+                
+                } &> /dev/null
+            fi
+        done &> /dev/null && echo -e "\nSwap ${END}G ......................OK!\n"
+
+        if [ $? == 1 ]
+        then
+            echo -e "\nInicie pelo menos com 1. Ex. --make 1\n"
+        fi
+    }
+    make_swap
+
+elif [ "${1}" == "--remove" ]
+then
+    remove_swap() # Remove a swap criada, é preciso remover pelo menos 1.
+    {
+        for (( CNT=$START ; CNT<$END; CNT++ ))
+        do
+            if [ -f "${SWAP_FILE}${CNT}" ]
+            then
+                {
+                    swapoff ${SWAP_FILE}${CNT}
+                    rm -rf ${SWAP_FILE}${CNT}
+                    echo "$(sed -e "s/\/swapfile${CNT} swap swap defaults 0 0//g" "${FSTAB}")" \
+                    > "${FSTAB}"
+                
+                } &> /dev/null
+            fi
+
+        done &> /dev/null && echo -e "\nSwap ${END}G Removido ..............OK!\n"
+
+        if [ $? == 1 ]
+        then
+            echo -e "\nRemova pelo menos 1. Ex. --remove 1\n"
+        fi
+    }
+    remove_swap
+
+elif [ "${1}" == "--help" ]
+then
+    echo -e "\nPrograma para criar swap.
+É criado um arquivo /swapfile de 1G e formatado com mkswap e ativado com swapon.
+
+OBS: Esse programa só controla a swap que ele gera, ele não tem controle sobre a swap já
+existente no sistema.
+
+Ex. --make 1 é igual a criar 1G de Swap.
+
+--make [OPÇÃO] Ex. --make 1, cria 1G de Swap e adiciona na inicialização.
+--remove [OPÇÃO] Ex. --remove 1, remove 1G de Swap e retira da inicialização.\n"
+
+else
+    echo -e "\nUtiliza --make, --remove ou --help\n"
+fi
